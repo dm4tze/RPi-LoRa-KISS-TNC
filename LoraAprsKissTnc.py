@@ -21,6 +21,7 @@ sys.path.insert(0, './pySX127x/')
 from pySX127x.SX127x.LoRa import LoRa
 from pySX127x.SX127x.constants import *
 from pySX127x.SX127x.board_config import BOARD
+import RPi.GPIO as GPIO
 import time
 #import KissHelper
 
@@ -45,22 +46,32 @@ class LoraAprsKissTnc(LoRa):
         super(LoraAprsKissTnc, self).__init__(verbose)
         self.queue = queue
         self.appendSignalReport = appendSignalReport
+        
+        self.server = server
+        self.preamble =preamble
+        self.frequency = frequency
+        self.preamble = preamble
+        self.spreadingFactor = spreadingFactor
+        self.bandwidth = bandwidth
+        self.codingrate = codingrate
+        self.paSelect = paSelect
+        self.outputPower = outputPower
 
+        self.setupLora()
+    def setupLora(self):
         self.set_mode(MODE.SLEEP)
 
-        self.set_freq(frequency)
-        self.set_preamble(preamble)
-        self.set_spreading_factor(spreadingFactor)
-        self.set_bw(bandwidth)
+        self.set_freq(self.frequency)
+        self.set_preamble(self.preamble)
+        self.set_spreading_factor(self.spreadingFactor)
+        self.set_bw(self.bandwidth)
         self.set_low_data_rate_optim(True)
-        self.set_coding_rate(codingrate)
+        self.set_coding_rate(self.codingrate)
         self.set_ocp_trim(100)
 
-        self.set_pa_config(paSelect, outputPower)
+        self.set_pa_config(self.paSelect, self.outputPower)
         self.set_max_payload_length(255)
         self.set_dio_mapping([0] * 6)
-        self.server = server
-
         self.reset_ptr_rx()
         self.set_mode(MODE.RXCONT)
 
@@ -104,6 +115,31 @@ class LoraAprsKissTnc(LoRa):
             self.clear_irq_flags(RxDone=1, PayloadCrcError=1, RxTimeout=1)  # clear rxdone IRQ flag
             self.reset_ptr_rx()
             self.set_mode(MODE.RXCONT)
+            return
+        #For testing
+        #data = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        #check for error condition
+        if data == b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00':
+            print("Receiver Error, restarting...")
+            
+            self.clear_irq_flags(RxDone=1, PayloadCrcError=1, RxTimeout=1)  # clear rxdone IRQ flag
+            self.reset_ptr_rx()
+            self.set_mode(MODE.RXCONT)
+
+            GPIO.remove_event_detect(BOARD.DIO0)
+            GPIO.remove_event_detect(BOARD.DIO1)
+            GPIO.remove_event_detect(BOARD.DIO2)
+            GPIO.remove_event_detect(BOARD.DIO3)
+
+            BOARD.teardown()  
+            self.spi = BOARD.SpiDev()
+            BOARD.setup()  
+            super(LoraAprsKissTnc, self).__init__(verbose=self.verbose)
+            self.setupLora()
+
+            
+
+            print("Restarted")
             return
 
         if self.server:
