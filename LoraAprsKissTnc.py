@@ -23,6 +23,7 @@ from pySX127x.SX127x.constants import *
 from pySX127x.SX127x.board_config import BOARD
 import RPi.GPIO as GPIO
 import time
+from datetime import datetime
 #import KissHelper
 
 
@@ -36,6 +37,8 @@ class LoraAprsKissTnc(LoRa):
 
     queue = None
     server = None
+
+    restartToken = [1]
 
     # init has LoRa APRS default config settings - might be initialized different when creating object with parameters
     def __init__(self, queue, server, frequency=433.775, preamble=8, spreadingFactor=12, bandwidth=BW.BW125,
@@ -106,7 +109,7 @@ class LoraAprsKissTnc(LoRa):
         rssi = self.get_pkt_rssi_value()
         snr = self.get_pkt_snr_value()
         data = bytes(payload)
-        print("LoRa RX[%idBm/%idB, %ibytes]: %s" %(rssi, snr, len(data), repr(data)))
+        print("%s LoRa RX[%idBm/%idB, %ibytes]: %s" %(datetime.now(), rssi, snr, len(data), repr(data)))
 
         flags = self.get_irq_flags()
         if any([flags[s] for s in ['crc_error', 'rx_timeout']]):
@@ -117,29 +120,32 @@ class LoraAprsKissTnc(LoRa):
             self.set_mode(MODE.RXCONT)
             return
         #For testing
-        #data = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        data = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
         #check for error condition
         if data == b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00':
-            print("Receiver Error, restarting...")
-            
-            self.clear_irq_flags(RxDone=1, PayloadCrcError=1, RxTimeout=1)  # clear rxdone IRQ flag
-            self.reset_ptr_rx()
-            self.set_mode(MODE.RXCONT)
+            try:
+                self.restartToken.pop()    #atomic!
+                print("Receiver Error, restarting...")
+                
+                self.clear_irq_flags(RxDone=1, PayloadCrcError=1, RxTimeout=1)  # clear rxdone IRQ flag
+                self.reset_ptr_rx()
+                self.set_mode(MODE.RXCONT)
 
-            GPIO.remove_event_detect(BOARD.DIO0)
-            GPIO.remove_event_detect(BOARD.DIO1)
-            GPIO.remove_event_detect(BOARD.DIO2)
-            GPIO.remove_event_detect(BOARD.DIO3)
+                GPIO.remove_event_detect(BOARD.DIO0)
+                GPIO.remove_event_detect(BOARD.DIO1)
+                GPIO.remove_event_detect(BOARD.DIO2)
+                GPIO.remove_event_detect(BOARD.DIO3)
 
-            BOARD.teardown()  
-            self.spi = BOARD.SpiDev()
-            BOARD.setup()  
-            super(LoraAprsKissTnc, self).__init__(verbose=self.verbose)
-            self.setupLora()
+                BOARD.teardown()  
+                self.spi = BOARD.SpiDev()
+                BOARD.setup()  
+                super(LoraAprsKissTnc, self).__init__(verbose=self.verbose)
+                self.setupLora()
 
-            
-
-            print("Restarted")
+                print("Restarted")
+                self.restartToken.append(1)
+            except IndexError:
+                print("Already Restarting, abort...")
             return
 
         if self.server:
