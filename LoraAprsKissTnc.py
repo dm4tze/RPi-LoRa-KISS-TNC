@@ -120,7 +120,7 @@ class LoraAprsKissTnc(LoRa):
             self.set_mode(MODE.RXCONT)
             return
         #For testing
-        data = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+        #data = b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
         #check for error condition
         if data == b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00':
             try:
